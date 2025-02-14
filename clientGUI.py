@@ -24,7 +24,7 @@ def playeventsound(event: str):
     elif event == "srv_message":
         playsound("sounds/server_message.wav")
 
-username="HazmatPants"
+username="test49"
 
 # Initialize Tkinter
 root = tk.Tk()
@@ -40,7 +40,7 @@ loop = None
 asyncio_thread = None
 shutdown_flag = False # if this is true, program and threads will shutdown
 
-host = "192.168.1.195"
+host = "localhost"
 port = 8765
 
 # Function to print messages to the text console
