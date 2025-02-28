@@ -7,7 +7,8 @@ import asyncio # for async functions
 import websockets # for communication with the server
 import threading # for running multiple functions at once
 import json # for sending multiple values to the server
-from pygame import mixer
+import os
+from pygame import mixer # for sound effects
 
 mixer.init()
 
@@ -28,8 +29,8 @@ username="test42"
 
 # Initialize Tkinter
 root = tk.Tk()
-root.title("GIchat Client 1.1")
-root.geometry("400x300")
+root.title("GIchat Client 1.3")
+root.geometry("700x500")
 root.grid_columnconfigure(1, weight=1)  # Allow text widget to expand
 root.grid_rowconfigure(0, weight=1)     # Allow window resizing
 root.configure(bg="black")
@@ -63,47 +64,95 @@ def pingserver() -> float:
         print("ping success:", responsetime)
         messagebox.showinfo(title="Ping Sucessful", message="Response Time: " + str(round(responsetime, 3) * 1000) + "ms")
 
-def disconnect():
-    global shutdown_flag, websocket
-    shutdown_flag = True
-    if websocket:
-        websocket.close()
-    
-    playeventsound("disconnect")
-    time.sleep(0.5)
-    
-    root.quit()
-    exit()
-    
-root.protocol("WM_DELETE_WINDOW", disconnect)
-
 # Menu bar for the app
 menubar = tk.Menu(root)
 root.config(menu=menubar)
 
 # Show credits window
 def showcredits():
-    messagebox.showinfo(title="Credits", message="Made by Grigga Industries\nMade in Python 3.10")
+    messagebox.showinfo(title="Credits", message="Made by Grigga Industries\nWritten in Python 3.10")
+
+# Connect to the WebSocket server
+async def connect():
+    global websocket
+    global username
+    uri = "ws://" + host + ":" + str(port)
+    websocket = await websockets.connect(uri)
+    
+    await websocket.send(username)
+    
+    srv_info = json.loads(await websocket.recv())
+    consoleprint(f"Connected to {srv_info['name']} ({uri})\nThis server is running version {srv_info['version']}")
+    playeventsound("connect")
+    await receive_messages()
+
+async def disconnect(silent: bool=False):
+    global websocket
+    
+    if websocket:
+        try:
+            await websocket.close(reason="Client exiting")
+        except Exception as e:
+            consoleprint(f"Error closing WebSocket: {e}")
+        finally:
+            websocket = None  # Ensure it's fully cleaned up
+            
+        if not silent:
+            playeventsound("disconnect")
+        consoleprint("Disconnected.")
+    else:
+        consoleprint("Error: Not connected to a server")
+
+async def reconnect():
+    global websocket, loop
+    consoleprint("Attempting to reconnect...")
+
+    if websocket:
+        await websocket.close()
+
+    try:
+        await connect()
+        consoleprint("Reconnected successfully!")
+    except Exception as e:
+        consoleprint(f"Reconnection failed: {e}")
+
+async def client_exit():
+    global shutdown_flag
+    shutdown_flag = True  
+
+    try:
+        asyncio.create_task(disconnect())
+    except Exception as e:
+        consoleprint(f"Error during exit: {e}")
+
+    root.quit() 
+    os._exit(0)
+    
+root.protocol("WM_DELETE_WINDOW", lambda: asyncio.run_coroutine_threadsafe(client_exit(), loop))
 
 menu_info = tk.Menu(menubar, tearoff=0)
 menu_info.add_command(label="Credits", command=showcredits)
-menu_info.add_command(label="Exit", command=exit)
+menu_info.add_command(label="Exit", command=lambda: asyncio.run_coroutine_threadsafe(client_exit(), loop))
 menubar.add_cascade(label="Options", menu=menu_info)
 
 # Frame to hold buttons
 frame_button = tk.Frame(root, bg="black")
 frame_button.grid(row=0, column=0, padx=5, pady=5, sticky="ns")
 
-button_ping = tk.Button(frame_button, text="Ping", width=5, bg="#232323", fg="#ffffff", command=pingserver)
+button_ping = tk.Button(frame_button, text="Ping", width=8, bg="#232323", fg="#ffffff", command=pingserver)
 
 # Received messages and errors go to the text console
 text_console = tk.Text(root, width=30, height=10, bg="#232323", fg="#ffffff")
 
 button_ping.pack()
 
-# test button to see if layout works
-button_test1 = tk.Button(frame_button, text="test", width=5, bg="#232323", fg="#ffffff")
-button_test1.pack()
+button_disconnect = tk.Button(frame_button, text="Disconnect", width=8, bg="#232323", fg="#ffffff",
+                              command=lambda: asyncio.run_coroutine_threadsafe(disconnect(), loop))
+button_disconnect.pack()
+
+button_reconnect = tk.Button(frame_button, text="Reconnect", width=8, bg="#232323", fg="#ffffff",
+                             command=lambda: asyncio.run_coroutine_threadsafe(reconnect(), loop))
+button_reconnect.pack()
 
 text_console.grid(row=0, column=1, pady=5, columnspan=2, sticky="nsew")
 text_console.config(state=tk.DISABLED)
@@ -127,10 +176,13 @@ async def sendmessage():
         
         timestamp = time.time()
         
-        await websocket.send(message_json)  # Send the message over WebSocket
-        playeventsound("send_message")
-        root.after(0, consoleprint, f"{username} (You): {message}")
-        print(f"Sent {message.strip()} at {timestamp:.4f}")
+        if websocket and websocket.open:
+            await websocket.send(message_json)
+            playeventsound("send_message")
+            root.after(0, consoleprint, f"{username} (You): {message}")
+            print(f"Sent {message.strip()} at {timestamp:.4f}")
+        else:
+            consoleprint("Error: Not connected to a server")
 
 # Function to handle receiving messages
 async def receive_messages():
@@ -151,20 +203,6 @@ async def receive_messages():
     except websockets.exceptions.ConnectionClosed:
         consoleprint("Connection to server closed")
 
-# Connect to the WebSocket server
-async def connect():
-    global websocket
-    global username
-    uri = "ws://" + host + ":" + str(port)  # Change this to your server's address if needed
-    websocket = await websockets.connect(uri)
-    
-    await websocket.send(username)
-    
-    srv_info = json.loads(await websocket.recv())
-    consoleprint(f"Connected to {srv_info['name']} ({uri})\n This server is running version {srv_info['version']}")
-    playeventsound("connect")
-    await receive_messages()
-
 # Tkinter button command to send messages
 def send_button_click():
     global loop
@@ -182,7 +220,6 @@ def start_asyncio_loop():
         loop.run_until_complete(connect())  # Start the connection
     except ConnectionRefusedError:
         tk.messagebox.showerror(title="Failed to connect...", message="Error: Connection Refused")
-        disconnect()
     while not shutdown_flag:
         loop.run_forever()  # Keep the loop running
 
