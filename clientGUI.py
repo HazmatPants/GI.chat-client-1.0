@@ -47,14 +47,13 @@ def load_config() -> dict:
     except FileNotFoundError:
         log("Config file missing")
         data = {
-            "title": "client config",
             "client": {
                 "username": f"NewUser_{str(random.randint(1,10000))}",
                 "font": {
                     "name": "Helvetica",
                     "size": 10
                     },
-                "admin-key": None
+                "admin-key": ""
             },
             "server": {
                 "host": "86.3.132.254",
@@ -123,12 +122,12 @@ def open_config():
     entry_admin_key = tk.Entry(window, bg="#232323", fg="#ffffff", show="*")  # Hide key input
 
     # load current config into entries
-    entry_host.insert(0, CLI_CONFIG["host"])
-    entry_port.insert(0, CLI_CONFIG["port"])
-    entry_name.insert(0, CLI_CONFIG["username"])
-    entry_font_name.insert(0, CLI_CONFIG["font"]["name"])
-    entry_font_size.insert(0, CLI_CONFIG["font"]["size"])
-    entry_admin_key.insert(0, CLI_CONFIG.get("admin_key", ""))
+    entry_host.insert(0, CLI_CONFIG["server"]["host"])
+    entry_port.insert(0, CLI_CONFIG["server"]["port"])
+    entry_name.insert(0, CLI_CONFIG["client"]["username"])
+    entry_font_name.insert(0, CLI_CONFIG["client"]["font"]["name"])
+    entry_font_size.insert(0, CLI_CONFIG["client"]["font"]["size"])
+    entry_admin_key.insert(0, CLI_CONFIG["client"]["admin-key"])
     
     def save_user_config():
         data = {
