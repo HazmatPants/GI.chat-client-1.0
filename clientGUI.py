@@ -356,7 +356,7 @@ button_directconn.pack(pady=2)
 text_console.grid(row=0, column=1, pady=5, columnspan=2, sticky="nsew")
 text_console.config(state=tk.DISABLED)
 
-text_console.configure(font=(CLI_CONFIG["font"]["name"], CLI_CONFIG["font"]["size"]))
+text_console.configure(font=(CLI_CONFIG["client"]["font"]["name"], CLI_CONFIG["client"]["font"]["size"]))
 
 messagefield = tk.Text(root, bg="#232323", fg="#ffffff", height=2)
 messagefield.grid(row=3, column=1, columnspan=1, pady=5, sticky="ew")

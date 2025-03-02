@@ -1,0 +1,12 @@
+title = "client config"
+
+[client]
+username = "NewUser_7512"
+
+[server]
+host = "86.3.132.254"
+port = 8765
+
+[client.font]
+name = "Helvetica"
+size = 10
