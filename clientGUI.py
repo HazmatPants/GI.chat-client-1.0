@@ -3,6 +3,7 @@ import tkinter as tk # for GUI
 
 from PIL import Image, ImageTk
 from ping3 import ping # for pinging the server
+from plyer import notification
 import time # for timestamps
 import asyncio # for async functions
 import websockets # for communication with the server
@@ -88,7 +89,7 @@ username = CLI_CONFIG["client"]["username"]
 # Initialize Tkinter
 root = tk.Tk()
 root.title("GIchat Client 1.4")
-root.geometry("700x500")
+root.geometry("900x500")
 root.grid_columnconfigure(1, weight=1)  # Allow text widget to expand
 root.grid_rowconfigure(0, weight=1)     # Allow window resizing
 root.configure(bg="black")
@@ -131,15 +132,19 @@ def open_config():
     
     def save_user_config():
         data = {
-            "host": str(entry_host.get().strip()),
-            "port": int(entry_port.get().strip()),
-            "username": str(entry_name.get().strip()),
-            "font": {
-                "name": str(entry_font_name.get().strip()),
-                "size": int(entry_font_size.get().strip())
-                },
-            "admin-key": str(entry_admin_key.get().strip())
+            "client": {
+                "username": str(entry_name.get().strip()),
+                "font": {
+                    "name": str(entry_font_name.get().strip()),
+                    "size": int(entry_font_size.get().strip())
+                    },
+                "admin-key": str(entry_admin_key.get().strip())
+            },
+            "server": {
+                "host": str(entry_host.get().strip()),
+                "port": int(entry_port.get().strip()),
             }
+        }
 
         save_config(data)
         messagebox.showinfo(title="Saved Config", message="Config was successfully saved\nA restart is required for changes to apply.")
@@ -170,6 +175,8 @@ def consoleprint(text: str, image: tk.PhotoImage=None):
         text_console.insert(tk.END, text + "\n")
         if image:
             text_console.image_create(tk.END, image=image)
+            text_console.insert(tk.END, "\n")
+        text_console.update()
         text_console.config(state=tk.DISABLED)
     
     root.after(0, updateconsole)
@@ -186,13 +193,11 @@ def pingserver() -> float:
         print("ping success:", responsetime)
         messagebox.showinfo(title="Ping Sucessful", message="Response Time: " + str(round(responsetime, 3) * 1000) + "ms")
 
-# Menu bar for the app
 menubar = tk.Menu(root)
 root.config(menu=menubar)
 
-# Show credits window
 def showcredits():
-    messagebox.showinfo(title="Credits", message="Made by Grigga Industries\nWritten in Python 3.10\nSound from AIM and HL2")
+    messagebox.showinfo(title="Credits", message="Made by GI\nWritten in Python 3.10\nSound effects from AIM and Valve")
 
 async def disconnect(silent: bool=False):
     global websocket
@@ -204,7 +209,7 @@ async def disconnect(silent: bool=False):
             log(f"Error closing WebSocket: {e}")
             consoleprint(f"Error closing WebSocket: {e}")
         finally:
-            websocket = None  # Ensure it's fully cleaned up
+            websocket = None
             
         if not silent:
             playeventsound("disconnect")
@@ -227,7 +232,6 @@ async def client_exit():
     root.quit()
     os._exit(0)
 
-# Connect to the WebSocket server
 async def connect():
     global websocket
     global username
@@ -249,6 +253,19 @@ async def connect():
         srv_info = json.loads(srv_info_raw)
         log(f"Connected to {uri}")
         consoleprint(f"Connected to {srv_info['name']} ({uri})\nThis server is running version {srv_info['version']}")
+        data = {
+            "username": username,
+            "message": "RAW:USERLIST",
+            "event": "request",
+            "type": "msg"
+            }
+        await websocket.send(json.dumps(data))
+        online_users = await websocket.recv()
+        if type(online_users) == list:
+            users = ", ".join(online_users)
+            consoleprint("Online Users: " + users)
+        else:
+            consoleprint("No one is here...")
         playeventsound("connect")
         await receive_messages()
     except json.JSONDecodeError:
@@ -333,8 +350,7 @@ label_icon.pack()
 
 button_ping = tk.Button(frame_button, text="Ping", width=8, bg="#232323", fg="#ffffff", command=pingserver)
 
-# Received messages and errors go to the text console
-text_console = tk.Text(root, width=30, height=10, bg="#232323", fg="#ffffff")
+text_console = tk.Text(root, width=90, height=10, bg="#232323", fg="#ffffff")
 
 button_ping.pack(pady=2)
 
@@ -360,14 +376,26 @@ text_console.configure(font=(CLI_CONFIG["client"]["font"]["name"], CLI_CONFIG["c
 messagefield = tk.Text(root, bg="#232323", fg="#ffffff", height=2)
 messagefield.grid(row=3, column=1, columnspan=1, pady=5, sticky="ew")
 
-# Function to send the message
+FOCUSED = True
+
+def on_focus_in(event):
+    global FOCUSED
+    FOCUSED = True
+
+def on_focus_out(event):
+    global FOCUSED
+    FOCUSED = False
+
+root.bind("<FocusIn>", on_focus_in)
+root.bind("<FocusOut>", on_focus_out)
+
 async def sendmessage():
     global websocket
     message =  messagefield.get("1.0", tk.END)
-    messagefield.delete("1.0", tk.END)
     if len(message) > 2500:
         consoleprint("<server> message is too long.")
         return
+    messagefield.delete("1.0", tk.END)
     if message:
         message_data = {
             "type": "msg",
@@ -382,10 +410,11 @@ async def sendmessage():
 
         
         if websocket and websocket.open:
+            log("client sending message...")
             await websocket.send(message_json)
+            log("client sent message")
             playeventsound("send_message")
             root.after(0, consoleprint, f"<{username}> (You) {message}")
-            print(f"Sent {message.strip()} at {timestamp:.4f}")
         else:
             consoleprint("Error: Not connected to a server")
 
@@ -393,7 +422,7 @@ async def sendfile():
     global websocket
     file = filedialog.askopenfilename(title="Select a file", filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
     if file:
-        message = b64encode(file)
+        message = b64encode(Image.open(file).resize((500,500)))
         message_data = {
             "type": "file",
             "username": username,
@@ -407,10 +436,19 @@ async def sendfile():
         timestamp = time.time()
         
         if websocket and websocket.open:
+            log("client sending file...")
             await websocket.send(message_json)
+            log(f"client sent file {os.path.basename(file)}")
             playeventsound("send_message")
-            root.after(0, consoleprint, f"<{username}> (You) {os.path.basename(file)}")
-            print(f"Sent {os.path.basename(file)} at {timestamp:.4f}")
+            photo = Image.open(file).convert("RGB")
+            photo.thumbnail((500, 500))
+            photo = ImageTk.PhotoImage(photo)
+
+            text_console.photo_ref = photo
+            
+            consoleprint(f"<{username}> (You) sent an image")
+            text_console.image_create(tk.END, image=photo)
+            consoleprint("\n")
         else:
             consoleprint("Error: Not connected to a server")
 
@@ -425,7 +463,6 @@ def insert_new_line(event=None):
 messagefield.bind("<Return>", send_click)
 messagefield.bind("<Shift-Return>", insert_new_line)
 
-# Function to handle receiving messages
 async def receive_messages():
     global websocket
     try:
@@ -446,39 +483,50 @@ async def receive_messages():
                 playeventsound("rcv_message")
                 if message_data["type"] == "msg":
                     consoleprint(f"<{message_data['username']}> {message_data['message']}")
+                    if not FOCUSED:
+                        notification.notify(
+                            title="GIchat",
+                            message=f"<{message_data['username']}> {message_data['message']}",
+                            timeout=3
+                            )
                 elif message_data["type"] == "file":
-                    with open("image.png", "wb") as f:
+                    with open(message_data["filename"], "wb") as f:
                         f.write(b64decode(message_data["data"]))
-                    image = tk.PhotoImage(file="image.png")
-                    consoleprint("", image)
-                    os.remove("image.png")
+                    photo = Image.open(message_data["filename"]).resize((256, 256))
+                    photo = ImageTk.PhotoImage(photo)
+                    root.after(0, consoleprint, f"<{message_data['username']}> sent an image", photo)
+                    os.remove(message_data["filename"])
+                    if not FOCUSED:
+                         notification.notify(
+                            title="GIchat",
+                            message=f"<{message_data['username']}> sent an image",
+                            timeout=3
+                            )
 
-    except websockets.exceptions.ConnectionClosed:
-        consoleprint("Connection to server closed")
+    except websockets.exceptions.ConnectionClosed as e:
+        consoleprint(f"Connection to server closed: {e}")
+        log(f"Connection to server closed: {e}")
 
-# Start the WebSocket connection in the background
 def start_asyncio_loop():
     global loop
-    loop = asyncio.new_event_loop()  # Create a new event loop
-    asyncio.set_event_loop(loop)  # Set it as the current event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(connect())  # Start the connection
+        loop.run_until_complete(connect())
     except ConnectionRefusedError:
         tk.messagebox.showerror(title="Failed to connect...", message="Error: Connection Refused")
     while not shutdown_flag:
-        loop.run_forever()  # Keep the loop running
+        loop.run_forever()
 
 button_file = tk.Button(root, width=8, text="Send\nImage", bg="#232323", fg="#ffffff",
                         command=lambda: asyncio.run_coroutine_threadsafe(sendfile(), loop))
 button_file.grid(row=3, column=0)
 
-button_send = tk.Button(root, width=5, text="Send", bg="#232323", fg="#ffffff",
+button_send = tk.Button(root, width=5, text=">", bg="#232323", fg="#ffffff",
                         command=send_click)
 button_send.grid(row=3, column=2)
 
-# Start the asyncio event loop in a separate thread to avoid blocking Tkinter
 asyncio_thread = threading.Thread(target=start_asyncio_loop, daemon=True)
 asyncio_thread.start()
 
 root.mainloop()
-
