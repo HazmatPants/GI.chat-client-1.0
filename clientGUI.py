@@ -71,6 +71,7 @@ def load_config() -> dict:
 formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 log(f"// {formatted_time} //")
 
+CLI_VERSION = "1.4.1"
 CLI_CONFIG = load_config()
 CLI_DIR = os.path.dirname(__file__)
 os.chdir(CLI_DIR)
@@ -88,7 +89,7 @@ username = CLI_CONFIG["client"]["username"]
 
 # Initialize Tkinter
 root = tk.Tk()
-root.title("GIchat Client 1.4")
+root.title(f"GIchat Client {CLI_VERSION}")
 root.geometry("900x500")
 root.grid_columnconfigure(1, weight=1)  # Allow text widget to expand
 root.grid_rowconfigure(0, weight=1)     # Allow window resizing
@@ -261,6 +262,7 @@ async def connect():
             }
         await websocket.send(json.dumps(data))
         online_users = await websocket.recv()
+        online_users = eval(online_users)
         if type(online_users) == list:
             users = ", ".join(online_users)
             consoleprint("Online Users: " + users)
@@ -422,7 +424,7 @@ async def sendfile():
     global websocket
     file = filedialog.askopenfilename(title="Select a file", filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
     if file:
-        message = b64encode(Image.open(file).resize((500,500)))
+        message = b64encode(file)
         message_data = {
             "type": "file",
             "username": username,
