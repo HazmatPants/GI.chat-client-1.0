@@ -72,7 +72,7 @@ def load_config() -> dict:
 formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 log(f"// {formatted_time} //")
 
-CLI_VERSION = "1.4.1"
+CLI_VERSION = "1.5.1"
 CLI_CONFIG = load_config()
 CLI_DIR = os.path.dirname(__file__)
 os.chdir(CLI_DIR)
