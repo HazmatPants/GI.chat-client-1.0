@@ -3,7 +3,6 @@ import tkinter as tk # for GUI
 
 from PIL import Image, ImageTk
 from ping3 import ping # for pinging the server
-from plyer import notification
 import time # for timestamps
 import asyncio # for async functions
 import websockets # for communication with the server
@@ -262,7 +261,7 @@ async def connect():
             }
         await websocket.send(json.dumps(data))
         online_users = await websocket.recv()
-        online_users = eval(online_users)
+        online_users = json.loads(online_users)
         if type(online_users) == list:
             users = ", ".join(online_users)
             consoleprint("Online Users: " + users)
@@ -485,12 +484,6 @@ async def receive_messages():
                 playeventsound("rcv_message")
                 if message_data["type"] == "msg":
                     consoleprint(f"<{message_data['username']}> {message_data['message']}")
-                    if not FOCUSED:
-                        notification.notify(
-                            title="GIchat",
-                            message=f"<{message_data['username']}> {message_data['message']}",
-                            timeout=3
-                            )
                 elif message_data["type"] == "file":
                     with open(message_data["filename"], "wb") as f:
                         f.write(b64decode(message_data["data"]))

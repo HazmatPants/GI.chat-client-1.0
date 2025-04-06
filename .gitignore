@@ -1,4 +1,2 @@
 *.log
-requirements.txt
-config.toml
-.git/
+*.toml
