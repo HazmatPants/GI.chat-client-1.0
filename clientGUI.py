@@ -1,8 +1,9 @@
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
 import tkinter as tk # for GUI
 
 from PIL import Image, ImageTk
 from ping3 import ping # for pinging the server
+from datetime import datetime
 import time # for timestamps
 import asyncio # for async functions
 import websockets # for communication with the server
@@ -28,6 +29,7 @@ def b64decode(b64string: str):
     return base64.b64decode(b64string)
 
 def log(text: str):
+    print(text)
     with open("latest.log", "a") as f:
         f.writelines(text + "\n")
 
@@ -53,7 +55,7 @@ def load_config() -> dict:
                     "name": "Helvetica",
                     "size": 10
                     },
-                "admin-key": ""
+                "admin_key": ""
             },
             "server": {
                 "host": "86.3.132.254",
@@ -128,7 +130,7 @@ def open_config():
     entry_name.insert(0, CLI_CONFIG["client"]["username"])
     entry_font_name.insert(0, CLI_CONFIG["client"]["font"]["name"])
     entry_font_size.insert(0, CLI_CONFIG["client"]["font"]["size"])
-    entry_admin_key.insert(0, CLI_CONFIG["client"]["admin-key"])
+    entry_admin_key.insert(0, CLI_CONFIG["client"]["admin_key"])
     
     def save_user_config():
         data = {
@@ -138,7 +140,7 @@ def open_config():
                     "name": str(entry_font_name.get().strip()),
                     "size": int(entry_font_size.get().strip())
                     },
-                "admin-key": str(entry_admin_key.get().strip())
+                "admin_key": str(entry_admin_key.get().strip())
             },
             "server": {
                 "host": str(entry_host.get().strip()),
@@ -170,6 +172,7 @@ def open_config():
 
 # Function to print messages to the text console
 def consoleprint(text: str, image: tk.PhotoImage=None):
+    text = text.strip()
     def updateconsole():
         text_console.config(state=tk.NORMAL)
         text_console.insert(tk.END, text + "\n")
@@ -181,6 +184,30 @@ def consoleprint(text: str, image: tk.PhotoImage=None):
     
     root.after(0, updateconsole)
     text_console.see(tk.END)
+
+def load_messages(messages):
+    window = tk.Toplevel(root)
+    window.title("Loading...")
+    window.geometry("350x150")
+    window.configure(bg="black")
+    window.attributes("-topmost", True)
+    window.resizable(False, False) 
+    window.grab_set()
+    loading_label = tk.Label(window, text="Loading Messages", bg="#000000", fg="#ffffff")
+    loading_label.pack(pady=10)
+    progress_bar = ttk.Progressbar(window, length=300, mode="determinate")
+    progress_bar['maximum'] = len(messages)
+    progress_bar['value'] = 0
+    progress_bar.pack(pady=10)
+    
+    text_console.delete(1.0, tk.END)
+    for idx, message in enumerate(messages):
+        username, content, timestamp = message
+        formatted_message = f"[{timestamp}] <{username}> {content.strip()}"
+        consoleprint(formatted_message)
+        progress_bar['value'] = idx + 1
+        window.update_idletasks()
+    window.destroy()
 
 # Function to ping the server
 def pingserver() -> float:
@@ -231,6 +258,19 @@ async def client_exit():
 
     root.quit()
     os._exit(0)
+    
+async def retrieve_messages():
+    data = {
+        "username": username,
+        "message": "RAW:MSGDB",
+        "event": "request",
+        "type": "msg"
+        }
+    await websocket.send(json.dumps(data))
+    messages = await websocket.recv()
+    messages = json.loads(messages)
+    log(f"Retrieved {len(messages)} messages from server")
+    load_messages(messages)
 
 async def connect():
     global websocket
@@ -267,6 +307,8 @@ async def connect():
             consoleprint("Online Users: " + users)
         else:
             consoleprint("No one is here...")
+        log(f"Retrieved user list")
+        await retrieve_messages()
         playeventsound("connect")
         await receive_messages()
     except json.JSONDecodeError:
@@ -391,31 +433,31 @@ root.bind("<FocusIn>", on_focus_in)
 root.bind("<FocusOut>", on_focus_out)
 
 async def sendmessage():
-    global websocket
-    message =  messagefield.get("1.0", tk.END)
+    global websocket, CLI_CONFIG
+    message = messagefield.get("1.0", tk.END).strip()
     if len(message) > 2500:
         consoleprint("<server> message is too long.")
         return
     messagefield.delete("1.0", tk.END)
     if message:
+        print("admin_key" in CLI_CONFIG)
         message_data = {
             "type": "msg",
             "username": username,
             "message": message,
-            "event": "send_message"
+            "event": "send_message",
+            "admin_key": CLI_CONFIG["client"]["admin_key"]
             }
         
         message_json = json.dumps(message_data)
-        
-        timestamp = time.time()
-
         
         if websocket and websocket.open:
             log("client sending message...")
             await websocket.send(message_json)
             log("client sent message")
             playeventsound("send_message")
-            root.after(0, consoleprint, f"<{username}> (You) {message}")
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            root.after(0, consoleprint, f"[{timestamp}] <{username}> {message}")
         else:
             consoleprint("Error: Not connected to a server")
 
@@ -447,7 +489,8 @@ async def sendfile():
 
             text_console.photo_ref = photo
             
-            consoleprint(f"<{username}> (You) sent an image")
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            consoleprint(f"[{timestamp}] <{username}> sent an image")
             text_console.image_create(tk.END, image=photo)
             consoleprint("\n")
         else:
@@ -470,8 +513,7 @@ async def receive_messages():
         async for message in websocket:
             try:
                 message_data = json.loads(message)
-                
-                print(f"Received data: {message_data}")
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             except json.JSONDecodeError:
                 consoleprint("Received invalid data: " + message)
             if message_data["event"] == "srv_message":
@@ -483,20 +525,19 @@ async def receive_messages():
             elif message_data["event"] == "send_message":
                 playeventsound("rcv_message")
                 if message_data["type"] == "msg":
-                    consoleprint(f"<{message_data['username']}> {message_data['message']}")
+                    if message_data["event"] == "srv_command":
+                        if message_data["message"] == "RAW:CLRMSG":
+                            messages = []
+                            load_messages(messages)
+                    else:
+                        consoleprint(f"[{timestamp}] <{message_data['username']}> {message_data['message']}")
                 elif message_data["type"] == "file":
                     with open(message_data["filename"], "wb") as f:
                         f.write(b64decode(message_data["data"]))
                     photo = Image.open(message_data["filename"]).resize((256, 256))
                     photo = ImageTk.PhotoImage(photo)
-                    root.after(0, consoleprint, f"<{message_data['username']}> sent an image", photo)
+                    root.after(0, consoleprint, f"[{timestamp}] <{message_data['username']}> sent an image", photo)
                     os.remove(message_data["filename"])
-                    if not FOCUSED:
-                         notification.notify(
-                            title="GIchat",
-                            message=f"<{message_data['username']}> sent an image",
-                            timeout=3
-                            )
 
     except websockets.exceptions.ConnectionClosed as e:
         consoleprint(f"Connection to server closed: {e}")
