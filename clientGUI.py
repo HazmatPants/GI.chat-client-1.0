@@ -200,7 +200,7 @@ def load_messages(messages):
     progress_bar['value'] = 0
     progress_bar.pack(pady=10)
     
-    text_console.delete(1.0, tk.END)
+    console_clear()
     for idx, message in enumerate(messages):
         username, content, timestamp = message
         formatted_message = f"[{timestamp}] <{username}> {content.strip()}"
@@ -292,7 +292,6 @@ async def connect():
         srv_info_raw = await websocket.recv()
         srv_info = json.loads(srv_info_raw)
         log(f"Connected to {uri}")
-        consoleprint(f"Connected to {srv_info['name']} ({uri})\nThis server is running version {srv_info['version']}")
         data = {
             "username": username,
             "message": "RAW:USERLIST",
@@ -302,13 +301,14 @@ async def connect():
         await websocket.send(json.dumps(data))
         online_users = await websocket.recv()
         online_users = json.loads(online_users)
+        await retrieve_messages()
+        consoleprint(f"Connected to {srv_info['name']} ({uri})\nThis server is running version {srv_info['version']}")
         if type(online_users) == list:
             users = ", ".join(online_users)
             consoleprint("Online Users: " + users)
         else:
             consoleprint("No one is here...")
         log(f"Retrieved user list")
-        await retrieve_messages()
         playeventsound("connect")
         await receive_messages()
     except json.JSONDecodeError:
@@ -440,7 +440,8 @@ async def sendmessage():
         return
     messagefield.delete("1.0", tk.END)
     if message:
-        print("admin_key" in CLI_CONFIG)
+        if not "admin_key" in CLI_CONFIG["client"]:
+            CLI_CONFIG["client"]["admin_key"] = " "
         message_data = {
             "type": "msg",
             "username": username,
@@ -513,31 +514,31 @@ async def receive_messages():
         async for message in websocket:
             try:
                 message_data = json.loads(message)
+                print(message_data)
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             except json.JSONDecodeError:
                 consoleprint("Received invalid data: " + message)
-            if message_data["event"] == "srv_message":
-                if "joined" in message_data["message"]:
-                    playeventsound("user_join")
-                elif "left" in message_data["message"]:
-                    playeventsound("user_leave")
-                consoleprint(message_data["message"])
-            elif message_data["event"] == "send_message":
-                playeventsound("rcv_message")
-                if message_data["type"] == "msg":
-                    if message_data["event"] == "srv_command":
-                        if message_data["message"] == "RAW:CLRMSG":
-                            messages = []
-                            load_messages(messages)
-                    else:
-                        consoleprint(f"[{timestamp}] <{message_data['username']}> {message_data['message']}")
-                elif message_data["type"] == "file":
-                    with open(message_data["filename"], "wb") as f:
-                        f.write(b64decode(message_data["data"]))
-                    photo = Image.open(message_data["filename"]).resize((256, 256))
-                    photo = ImageTk.PhotoImage(photo)
-                    root.after(0, consoleprint, f"[{timestamp}] <{message_data['username']}> sent an image", photo)
-                    os.remove(message_data["filename"])
+            if message_data["type"] == "msg":
+                if message_data["event"] == "srv_message":
+                    if "joined" in message_data["message"]:
+                        playeventsound("user_join")
+                    elif "left" in message_data["message"]:
+                        playeventsound("user_leave")
+                    consoleprint(message_data["message"])
+                elif message_data["event"] == "send_message":
+                    playeventsound("rcv_message")
+                elif message_data["event"] == "srv_command":
+                    if message_data["message"] == "RAW:CLRMSG":
+                        await retrieve_messages()
+                else:
+                    consoleprint(f"[{timestamp}] <{message_data['username']}> {message_data['message']}")
+            elif message_data["type"] == "file":
+                with open(message_data["filename"], "wb") as f:
+                    f.write(b64decode(message_data["data"]))
+                photo = Image.open(message_data["filename"]).resize((256, 256))
+                photo = ImageTk.PhotoImage(photo)
+                root.after(0, consoleprint, f"[{timestamp}] <{message_data['username']}> sent an image", photo)
+                os.remove(message_data["filename"])
 
     except websockets.exceptions.ConnectionClosed as e:
         consoleprint(f"Connection to server closed: {e}")
