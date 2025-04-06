@@ -58,7 +58,7 @@ def load_config() -> dict:
                 "admin_key": ""
             },
             "server": {
-                "host": "86.3.132.254",
+                "host": "gichat.ydns.eu",
                 "port": 8765,
             }
         }
