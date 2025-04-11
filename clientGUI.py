@@ -90,7 +90,7 @@ username = CLI_CONFIG["client"]["username"]
 
 # Initialize Tkinter
 root = tk.Tk()
-root.title(f"GIchat Client {CLI_VERSION}")
+root.title(f"GI.𝘤𝘩𝘢𝘵 Client {CLI_VERSION}")
 root.geometry("900x500")
 root.grid_columnconfigure(1, weight=1)  # Allow text widget to expand
 root.grid_rowconfigure(0, weight=1)     # Allow window resizing
